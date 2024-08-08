@@ -8,7 +8,7 @@ import {
   GraphQLString,
 } from "graphql";
 
-const GraphQLBigInt = new GraphQLScalarType({
+export const GraphQLBigInt = new GraphQLScalarType({
   name: "BigInt",
   serialize: (value) => String(value),
   parseValue: (value) => BigInt(value as any),
@@ -31,3 +31,12 @@ export const SCALARS: { [type in Scalar]: GraphQLScalarType } = {
   bigint: GraphQLBigInt,
   hex: GraphQLString,
 };
+
+export const SCALARS2 = {
+  int: "Int",
+  float: "Float",
+  string: "String",
+  boolean: "Boolean",
+  bigint: "BigInt",
+  hex: "String",
+} as const;

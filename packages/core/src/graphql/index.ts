@@ -5,7 +5,6 @@ import { maxTokensPlugin } from "@escape.tech/graphql-armor-max-tokens";
 import { type YogaServerInstance, createYoga } from "graphql-yoga";
 import { createMiddleware } from "hono/factory";
 import { buildGraphQLSchema } from "./buildGraphqlSchema.js";
-import { buildLoaderCache } from "./buildLoaderCache.js";
 
 /**
  * Middleware for GraphQL with an interactive web view.
@@ -44,17 +43,16 @@ export const graphql = (
     }
 
     if (yoga === undefined) {
-      const readonlyStore = c.get("readonlyStore");
-      const metadataStore = c.get("metadataStore");
       const schema = c.get("schema");
       const graphqlSchema = buildGraphQLSchema(schema);
 
       yoga = createYoga({
         schema: graphqlSchema,
-        context: () => {
-          const getLoader = buildLoaderCache({ store: readonlyStore });
-          return { readonlyStore, metadataStore, getLoader };
-        },
+        context: () => ({
+          db: c.var.db,
+          tables: c.var.tables,
+          metadataStore: c.var.metadataStore,
+        }),
         graphqlEndpoint: c.req.path,
         maskedErrors: process.env.NODE_ENV === "production",
         logging: false,

@@ -504,7 +504,7 @@ importers:
     dependencies:
       forge-std:
         specifier: github:foundry-rs/forge-std
-        version: github.com/foundry-rs/forge-std/c28115db8d90ebffb41953cf83aac63130f4bd40
+        version: github.com/foundry-rs/forge-std/bf6606142994b1e47e2882ce0cd477c020d77623
 
   examples/with-foundry/ponder:
     dependencies:
@@ -693,6 +693,12 @@ importers:
       '@ponder/utils':
         specifier: workspace:*
         version: link:../utils
+      '@pothos/core':
+        specifier: ^4.1.0
+        version: 4.1.0(graphql@16.8.2)
+      '@pothos/plugin-dataloader':
+        specifier: ^4.1.0
+        version: 4.1.0(@pothos/core@4.1.0)(dataloader@2.2.2)(graphql@16.8.2)
       abitype:
         specifier: ^0.10.2
         version: 0.10.3(typescript@5.0.4)
@@ -3888,6 +3894,26 @@ packages:
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
     dev: false
 
+  /@pothos/core@4.1.0(graphql@16.8.2):
+    resolution: {integrity: sha512-EH9Gop2r09OUvDzWuIgB4mJhwgCU5R/U9gGRNt5I+ORFyc5EuxG0RLWJiOds6mcwm7DvggMegnTaU88N/M2SJw==}
+    peerDependencies:
+      graphql: '>=16.6.0'
+    dependencies:
+      graphql: 16.8.2
+    dev: false
+
+  /@pothos/plugin-dataloader@4.1.0(@pothos/core@4.1.0)(dataloader@2.2.2)(graphql@16.8.2):
+    resolution: {integrity: sha512-fr0crQ63snW56EKdiND+5qW1AncUb3/OUbKC3GqJvPDqoVUOtgvFBC3QM4PlhfqmWcNV5B1KjUBCV6IrY24o4Q==}
+    peerDependencies:
+      '@pothos/core': '*'
+      dataloader: '2'
+      graphql: '>=16.6.0'
+    dependencies:
+      '@pothos/core': 4.1.0(graphql@16.8.2)
+      dataloader: 2.2.2
+      graphql: 16.8.2
+    dev: false
+
   /@protobufjs/aspromise@1.1.2:
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
     dev: true
@@ -4945,6 +4971,9 @@ packages:
 
   /ajv-formats@2.1.1:
     resolution: {integrity: sha512-Wx0Kx52hxE7C18hkMEggYlEifqWZtYaRgouJor+WMdPnQyEK13vgEWyVNup7SoeeoLMsr4kf5h6dOW11I15MUA==}
+    peerDependenciesMeta:
+      ajv:
+        optional: true
     dependencies:
       ajv: 8.12.0
     dev: false
@@ -15177,8 +15206,8 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
     dev: false
 
-  github.com/foundry-rs/forge-std/c28115db8d90ebffb41953cf83aac63130f4bd40:
-    resolution: {tarball: https://codeload.github.com/foundry-rs/forge-std/tar.gz/c28115db8d90ebffb41953cf83aac63130f4bd40}
+  github.com/foundry-rs/forge-std/bf6606142994b1e47e2882ce0cd477c020d77623:
+    resolution: {tarball: https://codeload.github.com/foundry-rs/forge-std/tar.gz/bf6606142994b1e47e2882ce0cd477c020d77623}
     name: forge-std
-    version: 1.9.1
+    version: 1.9.2
     dev: false
