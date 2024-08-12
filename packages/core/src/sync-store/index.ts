@@ -36,6 +36,7 @@ import {
   intervalUnion,
 } from "@/utils/interval.js";
 import { never } from "@/utils/never.js";
+import { startClock } from "@/utils/timer.js";
 import { type Kysely, type SelectQueryBuilder, sql as ksql } from "kysely";
 import {
   type Address,
@@ -950,107 +951,21 @@ export const createSyncStore = ({
       return await db
         .with("event", () => query!)
         .selectFrom("event")
-        .select([
-          "event.filterIndex as event_filterIndex",
-          "event.checkpoint as event_checkpoint",
-        ])
         .innerJoin("blocks", "blocks.hash", "event.blockHash")
-        .select([
-          "blocks.baseFeePerGas as block_baseFeePerGas",
-          "blocks.difficulty as block_difficulty",
-          "blocks.extraData as block_extraData",
-          "blocks.gasLimit as block_gasLimit",
-          "blocks.gasUsed as block_gasUsed",
-          "blocks.hash as block_hash",
-          "blocks.logsBloom as block_logsBloom",
-          "blocks.miner as block_miner",
-          "blocks.mixHash as block_mixHash",
-          "blocks.nonce as block_nonce",
-          "blocks.number as block_number",
-          "blocks.parentHash as block_parentHash",
-          "blocks.receiptsRoot as block_receiptsRoot",
-          "blocks.sha3Uncles as block_sha3Uncles",
-          "blocks.size as block_size",
-          "blocks.stateRoot as block_stateRoot",
-          "blocks.timestamp as block_timestamp",
-          "blocks.totalDifficulty as block_totalDifficulty",
-          "blocks.transactionsRoot as block_transactionsRoot",
-        ])
         .leftJoin("logs", "logs.id", "event.logId")
-        .select([
-          "logs.address as log_address",
-          "logs.blockHash as log_blockHash",
-          "logs.blockNumber as log_blockNumber",
-          "logs.chainId as log_chainId",
-          "logs.data as log_data",
-          "logs.id as log_id",
-          "logs.logIndex as log_logIndex",
-          "logs.topic0 as log_topic0",
-          "logs.topic1 as log_topic1",
-          "logs.topic2 as log_topic2",
-          "logs.topic3 as log_topic3",
-          "logs.transactionHash as log_transactionHash",
-          "logs.transactionIndex as log_transactionIndex",
-        ])
         .leftJoin("transactions", "transactions.hash", "event.transactionHash")
-        .select([
-          "transactions.accessList as tx_accessList",
-          "transactions.blockHash as tx_blockHash",
-          "transactions.blockNumber as tx_blockNumber",
-          "transactions.from as tx_from",
-          "transactions.gas as tx_gas",
-          "transactions.gasPrice as tx_gasPrice",
-          "transactions.hash as tx_hash",
-          "transactions.input as tx_input",
-          "transactions.maxFeePerGas as tx_maxFeePerGas",
-          "transactions.maxPriorityFeePerGas as tx_maxPriorityFeePerGas",
-          "transactions.nonce as tx_nonce",
-          "transactions.r as tx_r",
-          "transactions.s as tx_s",
-          "transactions.to as tx_to",
-          "transactions.transactionIndex as tx_transactionIndex",
-          "transactions.type as tx_type",
-          "transactions.value as tx_value",
-          "transactions.v as tx_v",
-        ])
         .leftJoin("callTraces", "callTraces.id", "event.callTraceId")
-        .select([
-          "callTraces.id as callTrace_id",
-          "callTraces.callType as callTrace_callType",
-          "callTraces.from as callTrace_from",
-          "callTraces.gas as callTrace_gas",
-          "callTraces.input as callTrace_input",
-          "callTraces.to as callTrace_to",
-          "callTraces.value as callTrace_value",
-          "callTraces.blockHash as callTrace_blockHash",
-          "callTraces.blockNumber as callTrace_blockNumber",
-          "callTraces.gasUsed as callTrace_gasUsed",
-          "callTraces.output as callTrace_output",
-          "callTraces.subtraces as callTrace_subtraces",
-          "callTraces.traceAddress as callTrace_traceAddress",
-          "callTraces.transactionHash as callTrace_transactionHash",
-          "callTraces.transactionPosition as callTrace_transactionPosition",
-        ])
         .leftJoin(
           "transactionReceipts",
           "transactionReceipts.transactionHash",
           "event.transactionHash",
         )
         .select([
-          "transactionReceipts.blockHash as txr_blockHash",
-          "transactionReceipts.blockNumber as txr_blockNumber",
-          "transactionReceipts.contractAddress as txr_contractAddress",
-          "transactionReceipts.cumulativeGasUsed as txr_cumulativeGasUsed",
-          "transactionReceipts.effectiveGasPrice as txr_effectiveGasPrice",
-          "transactionReceipts.from as txr_from",
-          "transactionReceipts.gasUsed as txr_gasUsed",
-          "transactionReceipts.logs as txr_logs",
-          "transactionReceipts.logsBloom as txr_logsBloom",
-          "transactionReceipts.status as txr_status",
-          "transactionReceipts.to as txr_to",
-          "transactionReceipts.transactionHash as txr_transactionHash",
-          "transactionReceipts.transactionIndex as txr_transactionIndex",
-          "transactionReceipts.type as txr_type",
+          "event.filterIndex as event_filterIndex",
+          "event.checkpoint as event_checkpoint",
+          "transactions.hash as tx_hash",
+          "blocks.hash as block_hash",
+          "transactionReceipts.transactionHash as txr_hash",
         ])
         .selectAll()
         .where("event.checkpoint", ">", from)
@@ -1061,6 +976,8 @@ export const createSyncStore = ({
         .execute();
     });
 
+    const endClock = startClock();
+
     const events = rows.map((_row) => {
       // Without this cast, the block_ and tx_ fields are all nullable
       // which makes this very annoying. Should probably add a runtime check
@@ -1069,179 +986,190 @@ export const createSyncStore = ({
 
       const filter = filters[row.event_filterIndex]!;
 
-      const hasLog = row.log_id !== null;
+      const hasLog = row.logId !== null;
       const hasTransaction = row.tx_hash !== null;
-      const hasCallTrace = row.callTrace_id !== null;
-      const hasTransactionReceipt = row.txr_blockHash !== null;
+      const hasCallTrace = row.callTraceId !== null;
+      const hasTransactionReceipt = row.txr_hash !== null;
 
       return {
         chainId: filter.chainId,
         sourceIndex: row.event_filterIndex,
         checkpoint: row.event_checkpoint,
         block: {
-          baseFeePerGas: row.block_baseFeePerGas
-            ? parseBig(sql, row.block_baseFeePerGas)
-            : null,
-          difficulty: parseBig(sql, row.block_difficulty),
-          extraData: row.block_extraData,
-          gasLimit: parseBig(sql, row.block_gasLimit),
-          gasUsed: parseBig(sql, row.block_gasUsed),
-          hash: row.block_hash,
-          logsBloom: row.block_logsBloom,
-          miner: checksumAddress(row.block_miner),
-          mixHash: row.block_mixHash,
-          nonce: row.block_nonce,
-          number: parseBig(sql, row.block_number),
-          parentHash: row.block_parentHash,
-          receiptsRoot: row.block_receiptsRoot,
-          sha3Uncles: row.block_sha3Uncles,
-          size: parseBig(sql, row.block_size),
-          stateRoot: row.block_stateRoot,
-          timestamp: parseBig(sql, row.block_timestamp),
-          totalDifficulty: row.block_totalDifficulty
-            ? parseBig(sql, row.block_totalDifficulty)
-            : null,
-          transactionsRoot: row.block_transactionsRoot,
+          number: parseBig(sql, row.number),
+          timestamp: parseBig(sql, row.timestamp),
+          get baseFeePerGas() {
+            return row.baseFeePerGas ? parseBig(sql, row.baseFeePerGas) : null;
+          },
+
+          // baseFeePerGas: row.block_baseFeePerGas
+          //   ? parseBig(sql, row.block_baseFeePerGas)
+          //   : null,
+          // difficulty: parseBig(sql, row.block_difficulty),
+          // extraData: row.block_extraData,
+          // gasLimit: parseBig(sql, row.block_gasLimit),
+          // gasUsed: parseBig(sql, row.block_gasUsed),
+          // hash: row.block_hash,
+          // logsBloom: row.block_logsBloom,
+          // miner: checksumAddress(row.block_miner),
+          // mixHash: row.block_mixHash,
+          // nonce: row.block_nonce,
+          // parentHash: row.block_parentHash,
+          // receiptsRoot: row.block_receiptsRoot,
+          // sha3Uncles: row.block_sha3Uncles,
+          // size: parseBig(sql, row.block_size),
+          // stateRoot: row.block_stateRoot,
+          // totalDifficulty: row.block_totalDifficulty
+          //   ? parseBig(sql, row.block_totalDifficulty)
+          //   : null,
+          // transactionsRoot: row.block_transactionsRoot,
         },
         log: hasLog
           ? {
-              address: checksumAddress(row.log_address!),
-              blockHash: row.log_blockHash,
-              blockNumber: parseBig(sql, row.log_blockNumber!),
-              data: row.log_data,
-              id: row.log_id as Log["id"],
-              logIndex: Number(row.log_logIndex),
-              removed: false,
-              topics: [
-                row.log_topic0,
-                row.log_topic1,
-                row.log_topic2,
-                row.log_topic3,
-              ].filter((t): t is Hex => t !== null) as [Hex, ...Hex[]] | [],
-              transactionHash: row.log_transactionHash,
-              transactionIndex: Number(row.log_transactionIndex),
+              id: row.logId,
+              address: checksumAddress(row.address),
+              data: row.data,
+              topics: [row.topic0, row.topic1, row.topic2, row.topic3].filter(
+                (t): t is Hex => t !== null,
+              ) as [Hex, ...Hex[]] | [],
+              get blockHash() {
+                return row.blockHash;
+              },
+              // blockHash: row.log_blockHash,
+              // blockNumber: parseBig(sql, row.log_blockNumber!),
+              get logIndex() {
+                return row.logIndex;
+              },
+              // removed: false,
+              // transactionHash: row.log_transactionHash,
+              // transactionIndex: Number(row.log_transactionIndex),
             }
           : undefined,
         transaction: hasTransaction
           ? {
-              blockHash: row.tx_blockHash,
-              blockNumber: parseBig(sql, row.tx_blockNumber),
-              from: checksumAddress(row.tx_from),
-              gas: parseBig(sql, row.tx_gas),
               hash: row.tx_hash,
-              input: row.tx_input,
-              nonce: Number(row.tx_nonce),
-              r: row.tx_r,
-              s: row.tx_s,
-              to: row.tx_to ? checksumAddress(row.tx_to) : row.tx_to,
-              transactionIndex: Number(row.tx_transactionIndex),
-              value: parseBig(sql, row.tx_value),
-              v: row.tx_v ? parseBig(sql, row.tx_v) : null,
-              ...(row.tx_type === "0x0"
-                ? {
-                    type: "legacy",
-                    gasPrice: parseBig(sql, row.tx_gasPrice),
-                  }
-                : row.tx_type === "0x1"
-                  ? {
-                      type: "eip2930",
-                      gasPrice: parseBig(sql, row.tx_gasPrice),
-                      accessList: JSON.parse(row.tx_accessList),
-                    }
-                  : row.tx_type === "0x2"
-                    ? {
-                        type: "eip1559",
-                        maxFeePerGas: parseBig(sql, row.tx_maxFeePerGas),
-                        maxPriorityFeePerGas: parseBig(
-                          sql,
-                          row.tx_maxPriorityFeePerGas,
-                        ),
-                      }
-                    : row.tx_type === "0x7e"
-                      ? {
-                          type: "deposit",
-                          maxFeePerGas: row.tx_maxFeePerGas
-                            ? parseBig(sql, row.tx_maxFeePerGas)
-                            : undefined,
-                          maxPriorityFeePerGas: row.tx_maxPriorityFeePerGas
-                            ? parseBig(sql, row.tx_maxPriorityFeePerGas)
-                            : undefined,
-                        }
-                      : {
-                          type: row.tx_type,
-                        }),
+              get blockHash() {
+                return row.blockHash;
+              },
+              // blockNumber: parseBig(sql, row.tx_blockNumber),
+              // from: checksumAddress(row.tx_from),
+              // gas: parseBig(sql, row.tx_gas),
+              // hash: row.tx_hash,
+              // input: row.tx_input,
+              // nonce: Number(row.tx_nonce),
+              // r: row.tx_r,
+              // s: row.tx_s,
+              // to: row.tx_to ? checksumAddress(row.tx_to) : row.tx_to,
+              // transactionIndex: Number(row.tx_transactionIndex),
+              // value: parseBig(sql, row.tx_value),
+              // v: row.tx_v ? parseBig(sql, row.tx_v) : null,
+              // ...(row.tx_type === "0x0"
+              //   ? {
+              //       type: "legacy",
+              //       gasPrice: parseBig(sql, row.tx_gasPrice),
+              //     }
+              //   : row.tx_type === "0x1"
+              //     ? {
+              //         type: "eip2930",
+              //         gasPrice: parseBig(sql, row.tx_gasPrice),
+              //         accessList: JSON.parse(row.tx_accessList),
+              //       }
+              //     : row.tx_type === "0x2"
+              //       ? {
+              //           type: "eip1559",
+              //           maxFeePerGas: parseBig(sql, row.tx_maxFeePerGas),
+              //           maxPriorityFeePerGas: parseBig(
+              //             sql,
+              //             row.tx_maxPriorityFeePerGas,
+              //           ),
+              //         }
+              //       : row.tx_type === "0x7e"
+              //         ? {
+              //             type: "deposit",
+              //             maxFeePerGas: row.tx_maxFeePerGas
+              //               ? parseBig(sql, row.tx_maxFeePerGas)
+              //               : undefined,
+              //             maxPriorityFeePerGas: row.tx_maxPriorityFeePerGas
+              //               ? parseBig(sql, row.tx_maxPriorityFeePerGas)
+              //               : undefined,
+              //           }
+              //         : {
+              //             type: row.tx_type,
+              //           }),
             }
           : undefined,
         trace: hasCallTrace
           ? {
-              id: row.callTrace_id,
-              from: checksumAddress(row.callTrace_from),
-              to: checksumAddress(row.callTrace_to),
-              gas: parseBig(sql, row.callTrace_gas),
-              value: parseBig(sql, row.callTrace_value),
-              input: row.callTrace_input,
-              output: row.callTrace_output,
-              gasUsed: parseBig(sql, row.callTrace_gasUsed),
-              subtraces: row.callTrace_subtraces,
-              traceAddress: JSON.parse(row.callTrace_traceAddress),
-              blockHash: row.callTrace_blockHash,
-              blockNumber: parseBig(sql, row.callTrace_blockNumber),
-              transactionHash: row.callTrace_transactionHash,
-              transactionIndex: row.callTrace_transactionPosition,
-              callType: row.callTrace_callType as CallTrace["callType"],
+              id: row.callTraceId,
+              // from: checksumAddress(row.callTrace_from),
+              // to: checksumAddress(row.callTrace_to),
+              // gas: parseBig(sql, row.callTrace_gas),
+              // value: parseBig(sql, row.callTrace_value),
+              // input: row.callTrace_input,
+              // output: row.callTrace_output,
+              // gasUsed: parseBig(sql, row.callTrace_gasUsed),
+              // subtraces: row.callTrace_subtraces,
+              // traceAddress: JSON.parse(row.callTrace_traceAddress),
+              // blockHash: row.callTrace_blockHash,
+              // blockNumber: parseBig(sql, row.callTrace_blockNumber),
+              // transactionHash: row.callTrace_transactionHash,
+              // transactionIndex: row.callTrace_transactionPosition,
+              // callType: row.callTrace_callType as CallTrace["callType"],
             }
           : undefined,
         transactionReceipt: hasTransactionReceipt
           ? {
-              blockHash: row.txr_blockHash,
-              blockNumber: parseBig(sql, row.txr_blockNumber),
-              contractAddress: row.txr_contractAddress
-                ? checksumAddress(row.txr_contractAddress)
-                : null,
-              cumulativeGasUsed: parseBig(sql, row.txr_cumulativeGasUsed),
-              effectiveGasPrice: parseBig(sql, row.txr_effectiveGasPrice),
-              from: checksumAddress(row.txr_from),
-              gasUsed: parseBig(sql, row.txr_gasUsed),
-              logs: JSON.parse(row.txr_logs).map((log: SyncLog) => ({
-                address: checksumAddress(log.address),
-                blockHash: log.blockHash,
-                blockNumber: hexToBigInt(log.blockNumber),
-                data: log.data,
-                logIndex: hexToNumber(log.logIndex),
-                removed: false,
-                topics: [
-                  log.topics[0] ?? null,
-                  log.topics[1] ?? null,
-                  log.topics[2] ?? null,
-                  log.topics[3] ?? null,
-                ].filter((t): t is Hex => t !== null) as [Hex, ...Hex[]] | [],
-                transactionHash: log.transactionHash,
-                transactionIndex: hexToNumber(log.transactionIndex),
-              })),
-              logsBloom: row.txr_logsBloom,
-              status:
-                row.txr_status === "0x1"
-                  ? "success"
-                  : row.txr_status === "0x0"
-                    ? "reverted"
-                    : (row.txr_status as TransactionReceipt["status"]),
-              to: row.txr_to ? checksumAddress(row.txr_to) : null,
-              transactionHash: row.txr_transactionHash,
-              transactionIndex: Number(row.txr_transactionIndex),
-              type:
-                row.txr_type === "0x0"
-                  ? "legacy"
-                  : row.txr_type === "0x1"
-                    ? "eip2930"
-                    : row.tx_type === "0x2"
-                      ? "eip1559"
-                      : row.tx_type === "0x7e"
-                        ? "deposit"
-                        : row.tx_type,
+              // blockHash: row.txr_blockHash,
+              // blockNumber: parseBig(sql, row.txr_blockNumber),
+              // contractAddress: row.txr_contractAddress
+              //   ? checksumAddress(row.txr_contractAddress)
+              //   : null,
+              // cumulativeGasUsed: parseBig(sql, row.txr_cumulativeGasUsed),
+              // effectiveGasPrice: parseBig(sql, row.txr_effectiveGasPrice),
+              // from: checksumAddress(row.txr_from),
+              // gasUsed: parseBig(sql, row.txr_gasUsed),
+              // logs: JSON.parse(row.txr_logs).map((log: SyncLog) => ({
+              //   address: checksumAddress(log.address),
+              //   blockHash: log.blockHash,
+              //   blockNumber: hexToBigInt(log.blockNumber),
+              //   data: log.data,
+              //   logIndex: hexToNumber(log.logIndex),
+              //   removed: false,
+              //   topics: [
+              //     log.topics[0] ?? null,
+              //     log.topics[1] ?? null,
+              //     log.topics[2] ?? null,
+              //     log.topics[3] ?? null,
+              //   ].filter((t): t is Hex => t !== null) as [Hex, ...Hex[]] | [],
+              //   transactionHash: log.transactionHash,
+              //   transactionIndex: hexToNumber(log.transactionIndex),
+              // })),
+              // logsBloom: row.txr_logsBloom,
+              // status:
+              //   row.txr_status === "0x1"
+              //     ? "success"
+              //     : row.txr_status === "0x0"
+              //       ? "reverted"
+              //       : (row.txr_status as TransactionReceipt["status"]),
+              // to: row.txr_to ? checksumAddress(row.txr_to) : null,
+              // transactionHash: row.txr_transactionHash,
+              // transactionIndex: Number(row.txr_transactionIndex),
+              // type:
+              //   row.txr_type === "0x0"
+              //     ? "legacy"
+              //     : row.txr_type === "0x1"
+              //       ? "eip2930"
+              //       : row.tx_type === "0x2"
+              //         ? "eip1559"
+              //         : row.tx_type === "0x7e"
+              //           ? "deposit"
+              //           : row.tx_type,
             }
           : undefined,
-      } satisfies RawEvent;
+      } as RawEvent;
     });
+
+    console.log("format", endClock());
 
     let cursor: string;
     if (events.length !== limit) {
@@ -1250,7 +1178,7 @@ export const createSyncStore = ({
       cursor = events[events.length - 1]!.checkpoint!;
     }
 
-    return { events, cursor };
+    return { events: Object.freeze(events), cursor };
   },
   insertRpcRequestResult: async ({ request, blockNumber, chainId, result }) =>
     db.wrap({ method: "insertRpcRequestResult" }, async () => {
