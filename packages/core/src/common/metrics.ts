@@ -49,6 +49,8 @@ export class MetricsService {
   ponder_database_method_duration: prometheus.Histogram<"service" | "method">;
   ponder_database_method_error_total: prometheus.Counter<"service" | "method">;
 
+  ponder_database_decoding_duration: prometheus.Histogram<"method">;
+
   ponder_http_server_port: prometheus.Gauge;
   ponder_http_server_active_requests: prometheus.Gauge<"method" | "path">;
   ponder_http_server_request_duration_ms: prometheus.Histogram<
@@ -180,6 +182,12 @@ export class MetricsService {
       name: "ponder_database_method_error_total",
       help: "Total number of errors encountered during database operations",
       labelNames: ["service", "method"] as const,
+      registers: [this.registry],
+    });
+    this.ponder_database_decoding_duration = new prometheus.Histogram({
+      name: "ponder_database_decoding_duration",
+      help: "Duration of database decoding operations",
+      labelNames: ["method"] as const,
       registers: [this.registry],
     });
 
