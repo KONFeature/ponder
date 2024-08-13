@@ -19,7 +19,7 @@ import {
   type LogFilter,
   isAddressFactory,
 } from "@/sync/source.js";
-import type { CallTrace, Log, TransactionReceipt } from "@/types/eth.js";
+import type { Block, Log, Transaction } from "@/types/eth.js";
 import type {
   SyncBlock,
   SyncCallTrace,
@@ -961,6 +961,8 @@ export const createSyncStore = ({
           "transactions.hash as tx_hash",
           "blocks.hash as block_hash",
           "transactionReceipts.transactionHash as txr_hash",
+          "blocks.nonce as block_nonce",
+          "transactions.nonce as tx_nonce",
         ])
         .where("event.checkpoint", ">", from)
         .where("event.checkpoint", "<=", to)
@@ -985,112 +987,126 @@ export const createSyncStore = ({
       const hasCallTrace = row.callTraceId !== null;
       const hasTransactionReceipt = row.txr_hash !== null;
 
+      const block: Partial<Block> = {
+        hash: row.block_hash,
+        number: parseBig(sql, row.number),
+        timestamp: parseBig(sql, row.timestamp),
+      };
+
+      const blockHandler: ProxyHandler<Block> = {
+        get: (target, prop, receiver) => {
+          if (prop === "baseFeePerGas")
+            return row.baseFeePerGas ? parseBig(sql, row.baseFeePerGas) : null;
+          if (prop === "difficulty") parseBig(sql, row.difficulty);
+          if (prop === "extraData") return row.extraData;
+          if (prop === "gasLimit") parseBig(sql, row.gasLimit);
+          if (prop === "gasUsed") parseBig(sql, row.gasUsed);
+
+          if (prop === "hash") return row.hash;
+          if (prop === "logsBloom") return row.logsBloom;
+          if (prop === "miner") checksumAddress(row.miner);
+          if (prop === "mixHash") return row.mixHash;
+          if (prop === "nonce") return row.block_nonce;
+          if (prop === "parentHash") return row.parentHash;
+          if (prop === "receiptsRoot") return row.receiptsRoot;
+          if (prop === "sha3Uncles") return row.sha3Uncles;
+          if (prop === "size") parseBig(sql, row.size);
+          if (prop === "stateRoot") return row.stateRoot;
+          if (prop === "totalDifficulty")
+            return row.totalDifficulty
+              ? parseBig(sql, row.totalDifficulty)
+              : null;
+          if (prop === "transactionsRoot") return row.transactionsRoot;
+
+          return Reflect.get(target, prop, receiver);
+        },
+      };
+
+      const log: Partial<Log> = {
+        id: row.logId,
+        address: checksumAddress(row.address),
+        data: row.data,
+        topics: [row.topic0, row.topic1, row.topic2, row.topic3].filter(
+          (t): t is Hex => t !== null,
+        ) as [Hex, ...Hex[]] | [],
+      };
+
+      const logHandler: ProxyHandler<Log> = {
+        get: (target, prop, receiver) => {
+          if (prop === "logIndex") return row.logIndex;
+          if (prop === "blockHash") return row.blockHash;
+          if (prop === "blockNumber") return row.blockNumber;
+          if (prop === "transactionHash") return row.transactionHash;
+          if (prop === "transactionIndex") return row.transactionIndex;
+          if (prop === "removed") return false;
+          return Reflect.get(target, prop, receiver);
+        },
+      };
+
+      const transaction: Partial<Transaction> = {
+        hash: row.tx_hash,
+      };
+
+      const transactionHandler: ProxyHandler<Transaction> = {
+        get: (target, prop, receiver) => {
+          if (prop === "blockHash") return row.blockHash;
+          if (prop === "blockNumber") return row.blockNumber;
+          if (prop === "from") return checksumAddress(row.from);
+          if (prop === "gas") return parseBig(sql, row.gas);
+          if (prop === "input") return row.input;
+          if (prop === "nonce") return Number(row.tx_nonce);
+          if (prop === "r") return row.r;
+          if (prop === "s") return row.s;
+          if (prop === "to") return row.to ? checksumAddress(row.to) : row.to;
+          if (prop === "transactionIndex") return Number(row.transactionIndex);
+          if (prop === "value") return parseBig(sql, row.value);
+
+          // ...(row.tx_type === "0x0"
+          //   ? {
+          //       type: "legacy",
+          //       gasPrice: parseBig(sql, row.tx_gasPrice),
+          //     }
+          //   : row.tx_type === "0x1"
+          //     ? {
+          //         type: "eip2930",
+          //         gasPrice: parseBig(sql, row.tx_gasPrice),
+          //         accessList: JSON.parse(row.tx_accessList),
+          //       }
+          //     : row.tx_type === "0x2"
+          //       ? {
+          //           type: "eip1559",
+          //           maxFeePerGas: parseBig(sql, row.tx_maxFeePerGas),
+          //           maxPriorityFeePerGas: parseBig(
+          //             sql,
+          //             row.tx_maxPriorityFeePerGas,
+          //           ),
+          //         }
+          //       : row.tx_type === "0x7e"
+          //         ? {
+          //             type: "deposit",
+          //             maxFeePerGas: row.tx_maxFeePerGas
+          //               ? parseBig(sql, row.tx_maxFeePerGas)
+          //               : undefined,
+          //             maxPriorityFeePerGas: row.tx_maxPriorityFeePerGas
+          //               ? parseBig(sql, row.tx_maxPriorityFeePerGas)
+          //               : undefined,
+          //           }
+          //         : {
+          //             type: row.tx_type,
+          //           })
+
+          return Reflect.get(target, prop, receiver);
+        },
+      };
+
       return {
         chainId: filter.chainId,
         sourceIndex: row.event_filterIndex,
         checkpoint: row.event_checkpoint,
-        block: {
-          number: parseBig(sql, row.number),
-          timestamp: parseBig(sql, row.timestamp),
-          get baseFeePerGas() {
-            return row.baseFeePerGas ? parseBig(sql, row.baseFeePerGas) : null;
-          },
-
-          // baseFeePerGas: row.block_baseFeePerGas
-          //   ? parseBig(sql, row.block_baseFeePerGas)
-          //   : null,
-          // difficulty: parseBig(sql, row.block_difficulty),
-          // extraData: row.block_extraData,
-          // gasLimit: parseBig(sql, row.block_gasLimit),
-          // gasUsed: parseBig(sql, row.block_gasUsed),
-          // hash: row.block_hash,
-          // logsBloom: row.block_logsBloom,
-          // miner: checksumAddress(row.block_miner),
-          // mixHash: row.block_mixHash,
-          // nonce: row.block_nonce,
-          // parentHash: row.block_parentHash,
-          // receiptsRoot: row.block_receiptsRoot,
-          // sha3Uncles: row.block_sha3Uncles,
-          // size: parseBig(sql, row.block_size),
-          // stateRoot: row.block_stateRoot,
-          // totalDifficulty: row.block_totalDifficulty
-          //   ? parseBig(sql, row.block_totalDifficulty)
-          //   : null,
-          // transactionsRoot: row.block_transactionsRoot,
-        },
-        log: hasLog
-          ? {
-              id: row.logId,
-              address: checksumAddress(row.address),
-              data: row.data,
-              topics: [row.topic0, row.topic1, row.topic2, row.topic3].filter(
-                (t): t is Hex => t !== null,
-              ) as [Hex, ...Hex[]] | [],
-              get blockHash() {
-                return row.blockHash;
-              },
-              // blockHash: row.log_blockHash,
-              // blockNumber: parseBig(sql, row.log_blockNumber!),
-              get logIndex() {
-                return row.logIndex;
-              },
-              // removed: false,
-              // transactionHash: row.log_transactionHash,
-              // transactionIndex: Number(row.log_transactionIndex),
-            }
-          : undefined,
+        block: new Proxy(block, blockHandler),
+        log: hasLog ? new Proxy(log, logHandler) : undefined,
         transaction: hasTransaction
-          ? {
-              hash: row.tx_hash,
-              get blockHash() {
-                return row.blockHash;
-              },
-              // blockNumber: parseBig(sql, row.tx_blockNumber),
-              // from: checksumAddress(row.tx_from),
-              // gas: parseBig(sql, row.tx_gas),
-              // hash: row.tx_hash,
-              // input: row.tx_input,
-              // nonce: Number(row.tx_nonce),
-              // r: row.tx_r,
-              // s: row.tx_s,
-              // to: row.tx_to ? checksumAddress(row.tx_to) : row.tx_to,
-              // transactionIndex: Number(row.tx_transactionIndex),
-              // value: parseBig(sql, row.tx_value),
-              // v: row.tx_v ? parseBig(sql, row.tx_v) : null,
-              // ...(row.tx_type === "0x0"
-              //   ? {
-              //       type: "legacy",
-              //       gasPrice: parseBig(sql, row.tx_gasPrice),
-              //     }
-              //   : row.tx_type === "0x1"
-              //     ? {
-              //         type: "eip2930",
-              //         gasPrice: parseBig(sql, row.tx_gasPrice),
-              //         accessList: JSON.parse(row.tx_accessList),
-              //       }
-              //     : row.tx_type === "0x2"
-              //       ? {
-              //           type: "eip1559",
-              //           maxFeePerGas: parseBig(sql, row.tx_maxFeePerGas),
-              //           maxPriorityFeePerGas: parseBig(
-              //             sql,
-              //             row.tx_maxPriorityFeePerGas,
-              //           ),
-              //         }
-              //       : row.tx_type === "0x7e"
-              //         ? {
-              //             type: "deposit",
-              //             maxFeePerGas: row.tx_maxFeePerGas
-              //               ? parseBig(sql, row.tx_maxFeePerGas)
-              //               : undefined,
-              //             maxPriorityFeePerGas: row.tx_maxPriorityFeePerGas
-              //               ? parseBig(sql, row.tx_maxPriorityFeePerGas)
-              //               : undefined,
-              //           }
-              //         : {
-              //             type: row.tx_type,
-              //           }),
-            }
+          ? new Proxy(transaction, transactionHandler)
           : undefined,
         trace: hasCallTrace
           ? {
@@ -1163,7 +1179,10 @@ export const createSyncStore = ({
       } as RawEvent;
     });
 
-    console.log("format", endClock());
+    common.metrics.ponder_database_decoding_duration.observe(
+      { method: "getEvents" },
+      endClock(),
+    );
 
     let cursor: string;
     if (events.length !== limit) {
@@ -1172,7 +1191,7 @@ export const createSyncStore = ({
       cursor = events[events.length - 1]!.checkpoint!;
     }
 
-    return { events: Object.freeze(events), cursor };
+    return { events, cursor };
   },
   insertRpcRequestResult: async ({ request, blockNumber, chainId, result }) =>
     db.wrap({ method: "insertRpcRequestResult" }, async () => {
