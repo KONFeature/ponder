@@ -25,6 +25,8 @@ export class MetricsService {
   ponder_indexing_completed_timestamp: prometheus.Gauge;
   ponder_indexing_has_error: prometheus.Gauge;
 
+  ponder_indexing_decoding_duration: prometheus.Gauge;
+
   ponder_indexing_function_duration: prometheus.Histogram<"network" | "event">;
   ponder_indexing_function_error_total: prometheus.Counter<"network" | "event">;
 
@@ -95,6 +97,11 @@ export class MetricsService {
     this.ponder_indexing_has_error = new prometheus.Gauge({
       name: "ponder_indexing_has_error",
       help: "Boolean (0 or 1) indicating if there is an indexing error",
+      registers: [this.registry],
+    });
+    this.ponder_indexing_decoding_duration = new prometheus.Gauge({
+      name: "ponder_indexing_decoding_duration",
+      help: "Total time spent decoding log arguments and call trace arguments and results",
       registers: [this.registry],
     });
     this.ponder_indexing_function_duration = new prometheus.Histogram({
