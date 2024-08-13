@@ -565,7 +565,7 @@ export const getHistoricalStore = ({
             : data;
 
         // copy user-land record
-        const record = cacheEntry.record!;
+        const record = structuredClone(cacheEntry.record!);
         for (const [key, value] of Object.entries(update)) {
           record[key] = value;
         }
@@ -766,7 +766,7 @@ export const getHistoricalStore = ({
               : update;
 
           // copy user-land record
-          const record = cacheEntry.record;
+          const record = structuredClone(cacheEntry.record);
           for (const [key, value] of Object.entries(_update)) {
             record[key] = value;
           }
