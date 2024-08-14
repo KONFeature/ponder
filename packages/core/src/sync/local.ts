@@ -131,6 +131,9 @@ export const createLocalSync = async (
     get finalizedBlock() {
       return finalizedBlock;
     },
+    set finalizedBlock(block) {
+      finalizedBlock = block;
+    },
     async sync() {
       /**
        * Select a range of blocks to sync bounded by `finalizedBlock`.
