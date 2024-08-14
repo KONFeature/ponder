@@ -25,10 +25,10 @@ export class MetricsService {
   ponder_indexing_completed_timestamp: prometheus.Gauge;
   ponder_indexing_has_error: prometheus.Gauge;
 
-  ponder_indexing_decoding_duration: prometheus.Gauge;
-
   ponder_indexing_function_duration: prometheus.Histogram<"network" | "event">;
   ponder_indexing_function_error_total: prometheus.Counter<"network" | "event">;
+
+  ponder_indexing_decoding_duration: prometheus.Histogram;
 
   ponder_historical_start_timestamp: prometheus.Gauge<"network">;
   ponder_historical_total_blocks: prometheus.Gauge<
@@ -99,11 +99,6 @@ export class MetricsService {
       help: "Boolean (0 or 1) indicating if there is an indexing error",
       registers: [this.registry],
     });
-    this.ponder_indexing_decoding_duration = new prometheus.Gauge({
-      name: "ponder_indexing_decoding_duration",
-      help: "Total time spent decoding log arguments and call trace arguments and results",
-      registers: [this.registry],
-    });
     this.ponder_indexing_function_duration = new prometheus.Histogram({
       name: "ponder_indexing_function_duration",
       help: "Duration of indexing function execution",
@@ -115,6 +110,12 @@ export class MetricsService {
       name: "ponder_indexing_function_error_total",
       help: "Total number of errors encountered during indexing function execution",
       labelNames: ["network", "event"] as const,
+      registers: [this.registry],
+    });
+    this.ponder_indexing_decoding_duration = new prometheus.Histogram({
+      name: "ponder_indexing_decoding_duration",
+      help: "Total time spent decoding log arguments and call trace arguments and results",
+      buckets: databaseQueryDurationMs,
       registers: [this.registry],
     });
 
