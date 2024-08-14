@@ -165,98 +165,62 @@ export const createSyncStore = ({
       switch (filter.type) {
         case "log":
           {
-            await db.transaction().execute(async (tx) => {
-              for (const fragment of buildLogFilterFragments(filter)) {
-                if (isAddressFactory(filter.address)) {
-                  await tx
-                    .insertInto("factoryLogFilters")
-                    .values(fragment as LogFilterFragment<Factory>)
-                    .onConflict((oc) => oc.column("id").doNothing())
-                    .execute();
-
-                  await tx
-                    .insertInto("factoryLogFilterIntervals")
-                    .values({
-                      factoryId: fragment.id,
-                      ...intervalToBlock(interval),
-                    })
-                    .execute();
-                } else {
-                  await tx
-                    .insertInto("logFilters")
-                    .values(fragment)
-                    .onConflict((oc) => oc.column("id").doNothing())
-                    .execute();
-
-                  await tx
-                    .insertInto("logFilterIntervals")
-                    .values({
-                      logFilterId: fragment.id,
-                      ...intervalToBlock(interval),
-                    })
-                    .execute();
-                }
+            for (const fragment of buildLogFilterFragments(filter)) {
+              if (isAddressFactory(filter.address)) {
+                await db
+                  .insertInto("factoryLogFilterIntervals")
+                  .values({
+                    factoryId: fragment.id,
+                    ...intervalToBlock(interval),
+                  })
+                  .execute();
+              } else {
+                await db
+                  .insertInto("logFilterIntervals")
+                  .values({
+                    logFilterId: fragment.id,
+                    ...intervalToBlock(interval),
+                  })
+                  .execute();
               }
-            });
+            }
           }
           break;
 
         case "block":
           {
             const fragment = buildBlockFilterFragment(filter);
-            await db.transaction().execute(async (tx) => {
-              await tx
-                .insertInto("blockFilters")
-                .values(fragment)
-                .onConflict((oc) => oc.column("id").doNothing())
-                .executeTakeFirstOrThrow();
-
-              await tx
-                .insertInto("blockFilterIntervals")
-                .values({
-                  blockFilterId: fragment.id,
-                  ...intervalToBlock(interval),
-                })
-                .execute();
-            });
+            await db
+              .insertInto("blockFilterIntervals")
+              .values({
+                blockFilterId: fragment.id,
+                ...intervalToBlock(interval),
+              })
+              .execute();
           }
           break;
 
         case "callTrace":
           {
-            await db.transaction().execute(async (tx) => {
-              for (const fragment of buildTraceFilterFragments(filter)) {
-                if (isAddressFactory(filter.toAddress)) {
-                  await tx
-                    .insertInto("factoryTraceFilters")
-                    .values(fragment as TraceFilterFragment<Factory>)
-                    .onConflict((oc) => oc.column("id").doNothing())
-                    .execute();
-
-                  await tx
-                    .insertInto("factoryTraceFilterIntervals")
-                    .values({
-                      factoryId: fragment.id,
-                      ...intervalToBlock(interval),
-                    })
-                    .execute();
-                } else {
-                  await tx
-                    .insertInto("traceFilters")
-                    .values(fragment)
-                    .onConflict((oc) => oc.column("id").doNothing())
-                    .execute();
-
-                  await tx
-                    .insertInto("traceFilterIntervals")
-                    .values({
-                      traceFilterId: fragment.id,
-                      ...intervalToBlock(interval),
-                    })
-                    .execute();
-                }
+            for (const fragment of buildTraceFilterFragments(filter)) {
+              if (isAddressFactory(filter.toAddress)) {
+                await db
+                  .insertInto("factoryTraceFilterIntervals")
+                  .values({
+                    factoryId: fragment.id,
+                    ...intervalToBlock(interval),
+                  })
+                  .execute();
+              } else {
+                await db
+                  .insertInto("traceFilterIntervals")
+                  .values({
+                    traceFilterId: fragment.id,
+                    ...intervalToBlock(interval),
+                  })
+                  .execute();
               }
-            });
+            }
           }
           break;
 
@@ -434,7 +398,7 @@ export const createSyncStore = ({
               .insertInto(`${table}s`)
               .values(fragment)
               .onConflict((oc) => oc.column("id").doNothing())
-              .executeTakeFirstOrThrow();
+              .execute();
 
             // This is a trick to add a LIMIT to a DELETE statement
             const existingIntervals = await tx
