@@ -955,6 +955,7 @@ export const createSyncStore = ({
           "transactionReceipts.transactionHash",
           "event.transactionHash",
         )
+        .selectAll()
         .select([
           "event.filterIndex as event_filterIndex",
           "event.checkpoint as event_checkpoint",
