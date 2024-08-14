@@ -19,7 +19,13 @@ import {
   type LogFilter,
   isAddressFactory,
 } from "@/sync/source.js";
-import type { Block, Log, Transaction } from "@/types/eth.js";
+import type {
+  Block,
+  CallTrace,
+  Log,
+  Transaction,
+  TransactionReceipt,
+} from "@/types/eth.js";
 import type {
   SyncBlock,
   SyncCallTrace,
@@ -951,25 +957,109 @@ export const createSyncStore = ({
       return await db
         .with("event", () => query!)
         .selectFrom("event")
+        .select([
+          "event.filterIndex as event_filterIndex",
+          "event.checkpoint as event_checkpoint",
+        ])
         .innerJoin("blocks", "blocks.hash", "event.blockHash")
+        .select([
+          "blocks.baseFeePerGas as block_baseFeePerGas",
+          "blocks.difficulty as block_difficulty",
+          "blocks.extraData as block_extraData",
+          "blocks.gasLimit as block_gasLimit",
+          "blocks.gasUsed as block_gasUsed",
+          "blocks.hash as block_hash",
+          "blocks.logsBloom as block_logsBloom",
+          "blocks.miner as block_miner",
+          "blocks.mixHash as block_mixHash",
+          "blocks.nonce as block_nonce",
+          "blocks.number as block_number",
+          "blocks.parentHash as block_parentHash",
+          "blocks.receiptsRoot as block_receiptsRoot",
+          "blocks.sha3Uncles as block_sha3Uncles",
+          "blocks.size as block_size",
+          "blocks.stateRoot as block_stateRoot",
+          "blocks.timestamp as block_timestamp",
+          "blocks.totalDifficulty as block_totalDifficulty",
+          "blocks.transactionsRoot as block_transactionsRoot",
+        ])
         .leftJoin("logs", "logs.id", "event.logId")
+        .select([
+          "logs.address as log_address",
+          "logs.blockHash as log_blockHash",
+          "logs.blockNumber as log_blockNumber",
+          "logs.chainId as log_chainId",
+          "logs.data as log_data",
+          "logs.id as log_id",
+          "logs.logIndex as log_logIndex",
+          "logs.topic0 as log_topic0",
+          "logs.topic1 as log_topic1",
+          "logs.topic2 as log_topic2",
+          "logs.topic3 as log_topic3",
+          "logs.transactionHash as log_transactionHash",
+          "logs.transactionIndex as log_transactionIndex",
+        ])
         .leftJoin("transactions", "transactions.hash", "event.transactionHash")
+        .select([
+          "transactions.accessList as tx_accessList",
+          "transactions.blockHash as tx_blockHash",
+          "transactions.blockNumber as tx_blockNumber",
+          "transactions.from as tx_from",
+          "transactions.gas as tx_gas",
+          "transactions.gasPrice as tx_gasPrice",
+          "transactions.hash as tx_hash",
+          "transactions.input as tx_input",
+          "transactions.maxFeePerGas as tx_maxFeePerGas",
+          "transactions.maxPriorityFeePerGas as tx_maxPriorityFeePerGas",
+          "transactions.nonce as tx_nonce",
+          "transactions.r as tx_r",
+          "transactions.s as tx_s",
+          "transactions.to as tx_to",
+          "transactions.transactionIndex as tx_transactionIndex",
+          "transactions.type as tx_type",
+          "transactions.value as tx_value",
+          "transactions.v as tx_v",
+        ])
+
         .leftJoin("callTraces", "callTraces.id", "event.callTraceId")
+        .select([
+          "callTraces.id as callTrace_id",
+          "callTraces.callType as callTrace_callType",
+          "callTraces.from as callTrace_from",
+          "callTraces.gas as callTrace_gas",
+          "callTraces.input as callTrace_input",
+          "callTraces.to as callTrace_to",
+          "callTraces.value as callTrace_value",
+          "callTraces.blockHash as callTrace_blockHash",
+          "callTraces.blockNumber as callTrace_blockNumber",
+          "callTraces.gasUsed as callTrace_gasUsed",
+          "callTraces.output as callTrace_output",
+          "callTraces.subtraces as callTrace_subtraces",
+          "callTraces.traceAddress as callTrace_traceAddress",
+          "callTraces.transactionHash as callTrace_transactionHash",
+          "callTraces.transactionPosition as callTrace_transactionPosition",
+        ])
         .leftJoin(
           "transactionReceipts",
           "transactionReceipts.transactionHash",
           "event.transactionHash",
         )
         .select([
-          "event.filterIndex as event_filterIndex",
-          "event.checkpoint as event_checkpoint",
-          "transactions.hash as tx_hash",
-          "blocks.hash as block_hash",
-          "transactionReceipts.transactionHash as txr_hash",
-          "blocks.nonce as block_nonce",
-          "transactions.nonce as tx_nonce",
+          "transactionReceipts.blockHash as txr_blockHash",
+          "transactionReceipts.blockNumber as txr_blockNumber",
+          "transactionReceipts.contractAddress as txr_contractAddress",
+          "transactionReceipts.cumulativeGasUsed as txr_cumulativeGasUsed",
+          "transactionReceipts.effectiveGasPrice as txr_effectiveGasPrice",
+          "transactionReceipts.from as txr_from",
+          "transactionReceipts.gasUsed as txr_gasUsed",
+          "transactionReceipts.logs as txr_logs",
+          "transactionReceipts.logsBloom as txr_logsBloom",
+          "transactionReceipts.status as txr_status",
+          "transactionReceipts.to as txr_to",
+          "transactionReceipts.transactionHash as txr_transactionHash",
+          "transactionReceipts.transactionIndex as txr_transactionIndex",
+          "transactionReceipts.type as txr_type",
         ])
-        .selectAll()
         .where("event.checkpoint", ">", from)
         .where("event.checkpoint", "<=", to)
         .orderBy("event.checkpoint", "asc")
@@ -988,120 +1078,244 @@ export const createSyncStore = ({
 
       const filter = filters[row.event_filterIndex]!;
 
-      const hasLog = row.logId !== null;
+      const hasLog = row.log_id !== null;
       const hasTransaction = row.tx_hash !== null;
-      const hasCallTrace = row.callTraceId !== null;
-      const hasTransactionReceipt = row.txr_hash !== null;
+      const hasCallTrace = row.callTrace_id !== null;
+      const hasTransactionReceipt = row.txr_transactionHash !== null;
 
       const block: Partial<Block> = {
         hash: row.block_hash,
-        number: parseBig(sql, row.number),
-        timestamp: parseBig(sql, row.timestamp),
+        number: parseBig(sql, row.block_number),
+        timestamp: parseBig(sql, row.block_timestamp),
       };
 
       const blockHandler: ProxyHandler<Block> = {
         get: (target, prop, receiver) => {
-          if (prop === "baseFeePerGas")
-            return row.baseFeePerGas ? parseBig(sql, row.baseFeePerGas) : null;
-          if (prop === "difficulty") parseBig(sql, row.difficulty);
-          if (prop === "extraData") return row.extraData;
-          if (prop === "gasLimit") parseBig(sql, row.gasLimit);
-          if (prop === "gasUsed") parseBig(sql, row.gasUsed);
-
-          if (prop === "hash") return row.hash;
-          if (prop === "logsBloom") return row.logsBloom;
-          if (prop === "miner") checksumAddress(row.miner);
-          if (prop === "mixHash") return row.mixHash;
-          if (prop === "nonce") return row.block_nonce;
-          if (prop === "parentHash") return row.parentHash;
-          if (prop === "receiptsRoot") return row.receiptsRoot;
-          if (prop === "sha3Uncles") return row.sha3Uncles;
-          if (prop === "size") parseBig(sql, row.size);
-          if (prop === "stateRoot") return row.stateRoot;
-          if (prop === "totalDifficulty")
-            return row.totalDifficulty
-              ? parseBig(sql, row.totalDifficulty)
+          if (prop in target) return Reflect.get(target, prop, receiver);
+          if (prop === "baseFeePerGas") {
+            return row.block_baseFeePerGas
+              ? parseBig(sql, row.block_baseFeePerGas)
               : null;
-          if (prop === "transactionsRoot") return row.transactionsRoot;
-
-          return Reflect.get(target, prop, receiver);
+          }
+          if (prop === "difficulty") parseBig(sql, row.block_difficulty);
+          if (prop === "extraData") return row.block_extraData;
+          if (prop === "gasLimit") parseBig(sql, row.block_gasLimit);
+          if (prop === "gasUsed") parseBig(sql, row.block_gasUsed);
+          if (prop === "hash") return row.block_hash;
+          if (prop === "logsBloom") return row.block_logsBloom;
+          if (prop === "miner") checksumAddress(row.block_miner);
+          if (prop === "mixHash") return row.block_mixHash;
+          if (prop === "nonce") return row.block_nonce;
+          if (prop === "parentHash") return row.block_parentHash;
+          if (prop === "receiptsRoot") return row.block_receiptsRoot;
+          if (prop === "sha3Uncles") return row.block_sha3Uncles;
+          if (prop === "size") parseBig(sql, row.block_size);
+          if (prop === "stateRoot") return row.block_stateRoot;
+          if (prop === "totalDifficulty") {
+            return row.block_totalDifficulty
+              ? parseBig(sql, row.block_totalDifficulty)
+              : null;
+          }
+          if (prop === "transactionsRoot") return row.block_transactionsRoot;
         },
       };
 
-      const log: Partial<Log> = {
-        id: row.logId,
-        address: checksumAddress(row.address),
-        data: row.data,
-        topics: [row.topic0, row.topic1, row.topic2, row.topic3].filter(
-          (t): t is Hex => t !== null,
-        ) as [Hex, ...Hex[]] | [],
-      };
+      const log = hasLog
+        ? {
+            id: row.log_id,
+            address: checksumAddress(row.log_address),
+            data: row.log_data,
+            topics: [
+              row.log_topic0,
+              row.log_topic1,
+              row.log_topic2,
+              row.log_topic3,
+            ].filter((t): t is Hex => t !== null) as [Hex, ...Hex[]] | [],
+          }
+        : undefined;
 
       const logHandler: ProxyHandler<Log> = {
         get: (target, prop, receiver) => {
-          if (prop === "logIndex") return row.logIndex;
-          if (prop === "blockHash") return row.blockHash;
-          if (prop === "blockNumber") return row.blockNumber;
-          if (prop === "transactionHash") return row.transactionHash;
-          if (prop === "transactionIndex") return row.transactionIndex;
+          if (prop in target) return Reflect.get(target, prop, receiver);
+          if (prop === "logIndex") return row.log_logIndex;
+          if (prop === "blockHash") return row.log_blockHash;
+          if (prop === "blockNumber") return row.log_blockNumber;
+          if (prop === "transactionHash") return row.log_transactionHash;
+          if (prop === "transactionIndex") return row.log_transactionIndex;
           if (prop === "removed") return false;
-          return Reflect.get(target, prop, receiver);
         },
       };
 
-      const transaction: Partial<Transaction> = {
-        hash: row.tx_hash,
-      };
+      const transaction = hasTransaction
+        ? {
+            hash: row.tx_hash,
+            value: parseBig(sql, row.tx_value),
+          }
+        : undefined;
 
       const transactionHandler: ProxyHandler<Transaction> = {
         get: (target, prop, receiver) => {
-          if (prop === "blockHash") return row.blockHash;
-          if (prop === "blockNumber") return row.blockNumber;
-          if (prop === "from") return checksumAddress(row.from);
-          if (prop === "gas") return parseBig(sql, row.gas);
-          if (prop === "input") return row.input;
+          if (prop in target) return Reflect.get(target, prop, receiver);
+          if (prop === "blockHash") return row.tx_blockHash;
+          if (prop === "blockNumber") return row.tx_blockNumber;
+          if (prop === "from") return checksumAddress(row.tx_from);
+          if (prop === "gas") return parseBig(sql, row.tx_gas);
+          if (prop === "input") return row.tx_input;
           if (prop === "nonce") return Number(row.tx_nonce);
-          if (prop === "r") return row.r;
-          if (prop === "s") return row.s;
-          if (prop === "to") return row.to ? checksumAddress(row.to) : row.to;
-          if (prop === "transactionIndex") return Number(row.transactionIndex);
-          if (prop === "value") return parseBig(sql, row.value);
+          if (prop === "r") return row.tx_r;
+          if (prop === "s") return row.tx_s;
+          if (prop === "to") {
+            return row.tx_to ? checksumAddress(row.tx_to) : row.tx_to;
+          }
+          if (prop === "transactionIndex") {
+            return Number(row.tx_transactionIndex);
+          }
+          if (prop === "type") {
+            return row.tx_type === "0x0"
+              ? "legacy"
+              : row.tx_type === "0x1"
+                ? "eip2930"
+                : row.tx_type === "0x2"
+                  ? "eip1559"
+                  : row.tx_type === "0x7e"
+                    ? "deposit"
+                    : row.tx_type;
+          }
+          if (prop === "gasPrice") {
+            if (row.tx_type === "0x01" || row.tx_type === "0x2") {
+              return parseBig(sql, row.tx_gasPrice);
+            }
+            return undefined;
+          }
+          if (prop === "maxFeePerGas") {
+            if (row.tx_type === "0x02") {
+              return parseBig(sql, row.tx_maxFeePerGas);
+            }
+            if (row.tx_type === "0x7e") {
+              return row.tx_maxFeePerGas
+                ? parseBig(sql, row.tx_maxFeePerGas)
+                : undefined;
+            }
+            return undefined;
+          }
+          if (prop === "maxPriorityFeePerGas") {
+            if (row.tx_type === "0x02") {
+              return parseBig(sql, row.tx_maxPriorityFeePerGas);
+            }
+            if (row.tx_type === "0x7e") {
+              return row.tx_maxPriorityFeePerGas
+                ? parseBig(sql, row.tx_maxPriorityFeePerGas)
+                : undefined;
+            }
+            return undefined;
+          }
+          if (prop === "accessList" && row.tx_type === "0x1") {
+            return JSON.parse(row.tx_accessList);
+          }
+        },
+      };
 
-          // ...(row.tx_type === "0x0"
-          //   ? {
-          //       type: "legacy",
-          //       gasPrice: parseBig(sql, row.tx_gasPrice),
-          //     }
-          //   : row.tx_type === "0x1"
-          //     ? {
-          //         type: "eip2930",
-          //         gasPrice: parseBig(sql, row.tx_gasPrice),
-          //         accessList: JSON.parse(row.tx_accessList),
-          //       }
-          //     : row.tx_type === "0x2"
-          //       ? {
-          //           type: "eip1559",
-          //           maxFeePerGas: parseBig(sql, row.tx_maxFeePerGas),
-          //           maxPriorityFeePerGas: parseBig(
-          //             sql,
-          //             row.tx_maxPriorityFeePerGas,
-          //           ),
-          //         }
-          //       : row.tx_type === "0x7e"
-          //         ? {
-          //             type: "deposit",
-          //             maxFeePerGas: row.tx_maxFeePerGas
-          //               ? parseBig(sql, row.tx_maxFeePerGas)
-          //               : undefined,
-          //             maxPriorityFeePerGas: row.tx_maxPriorityFeePerGas
-          //               ? parseBig(sql, row.tx_maxPriorityFeePerGas)
-          //               : undefined,
-          //           }
-          //         : {
-          //             type: row.tx_type,
-          //           })
+      const callTrace = hasCallTrace
+        ? {
+            id: row.callTrace_id,
+            from: checksumAddress(row.callTrace_from),
+            to: checksumAddress(row.callTrace_to),
+            input: row.callTrace_input,
+            output: row.callTrace_output,
+            value: parseBig(sql, row.callTrace_value),
+          }
+        : undefined;
 
-          return Reflect.get(target, prop, receiver);
+      const callTraceHandler: ProxyHandler<CallTrace> = {
+        get: (target, prop, receiver) => {
+          if (prop in target) return Reflect.get(target, prop, receiver);
+          if (prop === "gas") return parseBig(sql, row.callTrace_gas);
+          if (prop === "gasUsed") return parseBig(sql, row.callTrace_gasUsed);
+          if (prop === "subtraces") return row.callTrace_subtraces;
+          if (prop === "traceAddress") {
+            return JSON.parse(row.callTrace_traceAddress);
+          }
+          if (prop === "blockHash") return row.callTrace_blockHash;
+          if (prop === "blockNumber") {
+            return parseBig(sql, row.callTrace_blockNumber);
+          }
+          if (prop === "transactionHash") return row.callTrace_transactionHash;
+          if (prop === "transactionIndex") {
+            return row.callTrace_transactionPosition;
+          }
+          if (prop === "callType") {
+            return row.callTrace_callType as CallTrace["callType"];
+          }
+        },
+      };
+
+      const transactionReceipt = hasTransactionReceipt
+        ? {
+            gasUsed: parseBig(sql, row.txr_gasUsed),
+          }
+        : undefined;
+
+      const transactionReceiptHandler: ProxyHandler<TransactionReceipt> = {
+        get: (target, prop, receiver) => {
+          if (prop in target) return Reflect.get(target, prop, receiver);
+          if (prop === "blockHash") return row.txr_blockHash;
+          if (prop === "blockNumber") return parseBig(sql, row.txr_blockNumber);
+          if (prop === "contractAddress") {
+            return row.txr_contractAddress
+              ? checksumAddress(row.txr_contractAddress)
+              : null;
+          }
+          if (prop === "cumulativeGasUsed") {
+            return parseBig(sql, row.txr_cumulativeGasUsed);
+          }
+          if (prop === "effectiveGasPrice") {
+            return parseBig(sql, row.txr_effectiveGasPrice);
+          }
+          if (prop === "from") return checksumAddress(row.txr_from);
+          if (prop === "logs") {
+            return JSON.parse(row.txr_logs).map((log: SyncLog) => ({
+              address: checksumAddress(log.address),
+              blockHash: log.blockHash,
+              blockNumber: hexToBigInt(log.blockNumber),
+              data: log.data,
+              logIndex: hexToNumber(log.logIndex),
+              removed: false,
+              topics: [
+                log.topics[0] ?? null,
+                log.topics[1] ?? null,
+                log.topics[2] ?? null,
+                log.topics[3] ?? null,
+              ].filter((t): t is Hex => t !== null) as [Hex, ...Hex[]] | [],
+              transactionHash: log.transactionHash,
+              transactionIndex: hexToNumber(log.transactionIndex),
+            }));
+          }
+          if (prop === "logsBloom") return row.txr_logsBloom;
+          if (prop === "status") {
+            return row.txr_status === "0x1"
+              ? "success"
+              : row.txr_status === "0x0"
+                ? "reverted"
+                : (row.txr_status as TransactionReceipt["status"]);
+          }
+          if (prop === "to") {
+            return row.txr_to ? checksumAddress(row.txr_to) : null;
+          }
+          if (prop === "transactionHash") return row.txr_transactionHash;
+          if (prop === "transactionIndex") {
+            return Number(row.txr_transactionIndex);
+          }
+          if (prop === "type") {
+            return row.txr_type === "0x0"
+              ? "legacy"
+              : row.txr_type === "0x1"
+                ? "eip2930"
+                : row.tx_type === "0x2"
+                  ? "eip1559"
+                  : row.tx_type === "0x7e"
+                    ? "deposit"
+                    : row.tx_type;
+          }
         },
       };
 
@@ -1110,77 +1324,15 @@ export const createSyncStore = ({
         sourceIndex: row.event_filterIndex,
         checkpoint: row.event_checkpoint,
         block: new Proxy(block, blockHandler),
-        log: hasLog ? new Proxy(log, logHandler) : undefined,
+        log: hasLog ? new Proxy(log!, logHandler) : undefined,
         transaction: hasTransaction
-          ? new Proxy(transaction, transactionHandler)
+          ? new Proxy(transaction!, transactionHandler)
           : undefined,
         trace: hasCallTrace
-          ? {
-              id: row.callTraceId,
-              // from: checksumAddress(row.callTrace_from),
-              // to: checksumAddress(row.callTrace_to),
-              // gas: parseBig(sql, row.callTrace_gas),
-              // value: parseBig(sql, row.callTrace_value),
-              // input: row.callTrace_input,
-              // output: row.callTrace_output,
-              // gasUsed: parseBig(sql, row.callTrace_gasUsed),
-              // subtraces: row.callTrace_subtraces,
-              // traceAddress: JSON.parse(row.callTrace_traceAddress),
-              // blockHash: row.callTrace_blockHash,
-              // blockNumber: parseBig(sql, row.callTrace_blockNumber),
-              // transactionHash: row.callTrace_transactionHash,
-              // transactionIndex: row.callTrace_transactionPosition,
-              // callType: row.callTrace_callType as CallTrace["callType"],
-            }
+          ? new Proxy(callTrace!, callTraceHandler)
           : undefined,
         transactionReceipt: hasTransactionReceipt
-          ? {
-              // blockHash: row.txr_blockHash,
-              // blockNumber: parseBig(sql, row.txr_blockNumber),
-              // contractAddress: row.txr_contractAddress
-              //   ? checksumAddress(row.txr_contractAddress)
-              //   : null,
-              // cumulativeGasUsed: parseBig(sql, row.txr_cumulativeGasUsed),
-              // effectiveGasPrice: parseBig(sql, row.txr_effectiveGasPrice),
-              // from: checksumAddress(row.txr_from),
-              // gasUsed: parseBig(sql, row.txr_gasUsed),
-              // logs: JSON.parse(row.txr_logs).map((log: SyncLog) => ({
-              //   address: checksumAddress(log.address),
-              //   blockHash: log.blockHash,
-              //   blockNumber: hexToBigInt(log.blockNumber),
-              //   data: log.data,
-              //   logIndex: hexToNumber(log.logIndex),
-              //   removed: false,
-              //   topics: [
-              //     log.topics[0] ?? null,
-              //     log.topics[1] ?? null,
-              //     log.topics[2] ?? null,
-              //     log.topics[3] ?? null,
-              //   ].filter((t): t is Hex => t !== null) as [Hex, ...Hex[]] | [],
-              //   transactionHash: log.transactionHash,
-              //   transactionIndex: hexToNumber(log.transactionIndex),
-              // })),
-              // logsBloom: row.txr_logsBloom,
-              // status:
-              //   row.txr_status === "0x1"
-              //     ? "success"
-              //     : row.txr_status === "0x0"
-              //       ? "reverted"
-              //       : (row.txr_status as TransactionReceipt["status"]),
-              // to: row.txr_to ? checksumAddress(row.txr_to) : null,
-              // transactionHash: row.txr_transactionHash,
-              // transactionIndex: Number(row.txr_transactionIndex),
-              // type:
-              //   row.txr_type === "0x0"
-              //     ? "legacy"
-              //     : row.txr_type === "0x1"
-              //       ? "eip2930"
-              //       : row.tx_type === "0x2"
-              //         ? "eip1559"
-              //         : row.tx_type === "0x7e"
-              //           ? "deposit"
-              //           : row.tx_type,
-            }
+          ? new Proxy(transactionReceipt!, transactionReceiptHandler)
           : undefined,
       } as RawEvent;
     });
