@@ -180,6 +180,7 @@ export class MetricsService {
       name: "ponder_database_decoding_duration",
       help: "Duration of database decoding operations",
       labelNames: ["method"] as const,
+      buckets: databaseQueryDurationMs,
       registers: [this.registry],
     });
 
