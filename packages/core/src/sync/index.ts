@@ -65,10 +65,10 @@ export type Status = {
   };
 };
 
-// type RawBlockEvent = Omit<
-//   Extract<RealtimeSyncEvent, { type: "block" }>,
-//   "type"
-// >;
+export type RawBlockEvent = Omit<
+  Extract<RealtimeSyncEvent, { type: "block" }>,
+  "type"
+>;
 
 export type BlockProgress = {
   start: SyncBlock | LightBlock;

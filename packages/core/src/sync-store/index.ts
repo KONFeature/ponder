@@ -1225,11 +1225,11 @@ export const createSyncStore = ({
                   ? "legacy"
                   : row.txr_type === "0x1"
                     ? "eip2930"
-                    : row.tx_type === "0x2"
+                    : row.txr_type === "0x2"
                       ? "eip1559"
-                      : row.tx_type === "0x7e"
+                      : row.txr_type === "0x7e"
                         ? "deposit"
-                        : row.tx_type,
+                        : row.txr_type,
             }
           : undefined,
       } satisfies RawEvent;
